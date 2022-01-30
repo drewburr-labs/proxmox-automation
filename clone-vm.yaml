@@ -1,0 +1,56 @@
+---
+# Required vars:
+# vm_name - name of the VM to create
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # pmox_user:
+    # pmox_password:
+    pmox_url: pve02.drewburr.com
+    template_name: ubuntu-20.04-template
+    vm_destination_node: pve02
+    vm_name: test03
+
+  module_defaults:
+    community.general.proxmox_kvm:
+      proxmox_default_behavior: no_defaults
+      api_user: "{{ pmox_user }}"
+      api_password: "{{ pmox_password }}"
+      api_host: "{{ pmox_url }}"
+      node: "{{ vm_destination_node }}"
+
+  tasks:
+    - name: Clone VM
+      community.general.proxmox_kvm:
+        name: "{{ vm_name }}"
+        clone: "{{ template_name }}"
+        timeout: 300
+      register: clone_result
+      tags:
+        - create
+
+    - name: Get VM info
+      community.general.proxmox_kvm:
+        name: "{{ vm_name }}"
+        state: current
+      register: vm_info
+      until:
+        - not vm_info.failed
+
+    - ansible.builtin.debug:
+        var: vm_info
+
+    - name: Delete VM
+      community.general.proxmox_kvm:
+        name: "{{ vm_name }}"
+        state: absent
+      tags:
+        - delete
+
+    # - name: Start VM
+    #   community.general.proxmox_kvm:
+    #     name: "{{ vm_name }}"
+    #     state: started
+    #     timeout: 900
