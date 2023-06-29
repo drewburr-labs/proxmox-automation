@@ -14,15 +14,6 @@
       node: "{{ vm_destination_node }}"
 
   tasks:
-    - name: Clone VM
-      community.general.proxmox_kvm:
-        name: "{{ vm_name }}"
-        clone: "{{ template_name }}"
-        timeout: 300
-      register: clone_result
-      tags:
-        - create
-
     - name: Get VM state
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
@@ -30,9 +21,6 @@
       register: vm_state
       until:
         - not vm_state.failed
-
-    - ansible.builtin.debug:
-        var: vm_state
 
     - name: Get API ticket
       ansible.builtin.uri:
@@ -67,20 +55,6 @@
       vars:
         vm_net0: "{{ vm_config.json.data.net0 | split(',') | map('split', '=') | items2dict(key_name=0, value_name=1) }}"
 
-    - name: Update VM disk space
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_destination_node }}/qemu/{{ vm_state.vmid }}/resize"
-        method: PUT
-        validate_certs: false
-        force_basic_auth: true
-        headers:
-          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
-          CSRFPreventionToken: "{{ pmox_token }}"
-        body_format: json
-        body:
-          disk: scsi0
-          size: "{{ hdd_size }}"
-
     - name: Share data with pihole
       set_fact:
         vm_mac_address: "{{ vm_mac_address }}"
@@ -91,41 +65,16 @@
   gather_facts: false
 
   tasks:
-    - name: "Ensure DNS reservation is safe - {{ item }}"
-      ansible.builtin.lineinfile:
-        path: "{{ custom_dns_configs }}"
-        state: absent
-        search_string: "{{ item }}"
-      check_mode: true
-      register: dns_check_res
-      failed_when: (dns_check_res is changed) or (dns_check_res is failed)
-      loop:
-        - "{{ vm_dns_name }}"
-        - "{{ vm_ip_address }}"
-
-    - name: "Ensure DHCP reservation is safe - {{ item }}"
-      ansible.builtin.lineinfile:
-        path: "{{ static_dhcp_configs }}"
-        state: absent
-        search_string: "{{ item }}"
-      check_mode: true
-      register: dhcp_check_res
-      failed_when: (dhcp_check_res is changed) or (dhcp_check_res is failed)
-      loop:
-        - "{{ vm_dns_name }}"
-        - "{{ vm_ip_address }}"
-        - "{{ vm_mac_address }}"
-
-    - name: Set static IP
+    - name: Delete static IP
       community.docker.docker_container_exec:
         container: pihole
-        command: /bin/bash -c "pihole -a addstaticdhcp {{ vm_mac_address }} {{ vm_ip_address }} {{ vm_dns_name }}"
+        command: /bin/bash -c "pihole -a removestaticdhcp {{ vm_mac_address }}"
       register: ip_reservation_result
 
-    - name: Set DNS record
+    - name: Delete DNS record
       community.docker.docker_container_exec:
         container: pihole
-        command: /bin/bash -c "pihole -a addcustomdns {{ vm_ip_address }} {{ vm_dns_name }}"
+        command: /bin/bash -c "pihole -a removecustomdns {{ vm_ip_address }} {{ vm_dns_name }}"
       register: dns_creation_result
 
 - hosts: proxmox
@@ -141,29 +90,23 @@
       node: "{{ vm_destination_node }}"
 
   tasks:
-    - name: Set static IP on VM
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_destination_node }}/qemu/{{ vm_state.vmid }}/config"
-        method: PUT
-        validate_certs: false
-        force_basic_auth: true
-        headers:
-          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
-          CSRFPreventionToken: "{{ pmox_token }}"
-        body_format: json
-        body:
-          ipconfig0: "gw={{ ipv4_gateway }},ip={{ vm_ip_address }}/{{ ipv4_cidr }}"
-
-    - name: Start VM
+    - name: Force stop VM
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
-        state: started
-        timeout: 300
+        state: stopped
+        force: true
 
-    - name: Wait until VM is running
+    - name: Wait until VM is fully stopped
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
         state: current
       register: vm_state
       until:
-        - vm_state.status == "running"
+        - vm_state.status == "stopped"
+
+    - name: Delete VM
+      community.general.proxmox_kvm:
+        name: "{{ vm_name }}"
+        state: absent
+        force: true
+        timeout: 60

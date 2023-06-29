@@ -1,4 +1,8 @@
 ---
 # ansible_user:
 # ansible_ssh_pass:
-# ansible_become_pass:
+ansible_become_pass: "{{ ansible_ssh_pass }}"
+dns_domain: drewburr.com
+vm_dns_name: "{{ vm_name }}.{{ dns_domain }}"
+ipv4_gateway: 192.168.4.1
+ipv4_cidr: 23
