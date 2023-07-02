@@ -1,7 +1,26 @@
 ---
 # Required vars:
-# vm_name - name of the VM to create
-- hosts: proxmox
+# vms - List of data to create new VMs { name, ip_address, hdd_size, (opt) destination_node }
+# pmox_node - Required if unset in `vms`
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+  - name: Add VM hostname to inventory
+    ansible.builtin.add_host:
+      hostname: "{{ vm_dns_name }}"
+      groups: proxmox_vm
+      vm_name: "{{ item.name }}"
+      vm_ip_address: "{{ item.ip_address }}"
+      vm_hdd_size: "{{ item.hdd_size }}"
+      pmox_node: "{{ item.destination_node | default(pmox_node) }}"
+    vars:
+      vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
+    loop: "{{ vms }}"
+
+
+- hosts: proxmox_vm
   connection: local
   gather_facts: false
 
@@ -11,7 +30,7 @@
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
-      node: "{{ vm_destination_node }}"
+      node: "{{ pmox_node }}"
 
   tasks:
     - name: Clone VM
@@ -22,6 +41,7 @@
       register: clone_result
       tags:
         - create
+      throttle: 1 # Clone one host at a time
 
     - name: Get VM state
       community.general.proxmox_kvm:
@@ -53,7 +73,7 @@
 
     - name: Get VM configuration
       ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_destination_node }}/qemu/{{ vm_state.vmid }}/config"
+        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ pmox_node }}/qemu/{{ vm_state.vmid }}/config"
         method: GET
         validate_certs: false
         force_basic_auth: true
@@ -69,7 +89,7 @@
 
     - name: Update VM disk space
       ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_destination_node }}/qemu/{{ vm_state.vmid }}/resize"
+        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ pmox_node }}/qemu/{{ vm_state.vmid }}/resize"
         method: PUT
         validate_certs: false
         force_basic_auth: true
@@ -79,21 +99,28 @@
         body_format: json
         body:
           disk: scsi0
-          size: "{{ hdd_size }}"
+          size: "{{ vm_hdd_size }}"
+      when: clone_result is changed
 
-    - name: Share data with pihole
-      set_fact:
-        vm_mac_address: "{{ vm_mac_address }}"
-      delegate_to: pihole.drewburr.com
-      delegate_facts: true
+    # - name: Share data with pihole
+    #   set_fact:
+    #     vm_name: "{{ vm_name }}"
+    #     vm_ip_address: "{{ vm_ip_address }}"
+    #     vm_mac_address: "{{ vm_mac_address }}"
+    #   delegate_to: pihole.drewburr.com
+    #   delegate_facts: true
 
-- hosts: pihole
+- hosts: proxmox_vm
   gather_facts: false
+  tags:
+    - always
+    - pihole
 
   tasks:
-    - name: "Ensure DNS reservation is safe - {{ item }}"
+    - name: "Ensure DNS reservation is safe"
+      delegate_to: pihole.drewburr.com
       ansible.builtin.lineinfile:
-        path: "{{ custom_dns_configs }}"
+        path: "{{ pihole_custom_dns_configs }}"
         state: absent
         search_string: "{{ item }}"
       check_mode: true
@@ -103,9 +130,10 @@
         - "{{ vm_dns_name }}"
         - "{{ vm_ip_address }}"
 
-    - name: "Ensure DHCP reservation is safe - {{ item }}"
+    - name: "Ensure DHCP reservation is safe"
+      delegate_to: pihole.drewburr.com
       ansible.builtin.lineinfile:
-        path: "{{ static_dhcp_configs }}"
+        path: "{{ pihole_static_dhcp_configs }}"
         state: absent
         search_string: "{{ item }}"
       check_mode: true
@@ -117,18 +145,20 @@
         - "{{ vm_mac_address }}"
 
     - name: Set static IP
+      delegate_to: pihole.drewburr.com
       community.docker.docker_container_exec:
         container: pihole
         command: /bin/bash -c "pihole -a addstaticdhcp {{ vm_mac_address }} {{ vm_ip_address }} {{ vm_dns_name }}"
       register: ip_reservation_result
 
     - name: Set DNS record
+      delegate_to: pihole.drewburr.com
       community.docker.docker_container_exec:
         container: pihole
         command: /bin/bash -c "pihole -a addcustomdns {{ vm_ip_address }} {{ vm_dns_name }}"
       register: dns_creation_result
 
-- hosts: proxmox
+- hosts: proxmox_vm
   connection: local
   gather_facts: false
 
@@ -138,12 +168,12 @@
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
-      node: "{{ vm_destination_node }}"
+      node: "{{ pmox_node }}"
 
   tasks:
     - name: Set static IP on VM
       ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_destination_node }}/qemu/{{ vm_state.vmid }}/config"
+        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ pmox_node }}/qemu/{{ vm_state.vmid }}/config"
         method: PUT
         validate_certs: false
         force_basic_auth: true
@@ -167,3 +197,40 @@
       register: vm_state
       until:
         - vm_state.status == "running"
+
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Wait for SSH service to become available
+      ansible.builtin.wait_for:
+        port: 22
+        host: "{{ vm_dns_name }}"
+        search_regex: OpenSSH
+        delay: 10
+      register: ssh_wait_res
+      failed_when:
+        - ssh_wait_res is failed
+      vars:
+        vm_name: "{{ item.name }}" # # Needed to generate vm_dns_name
+      loop: "{{ vms }}"
+
+
+- hosts: proxmox_vm
+  gather_facts: false
+
+  tasks:
+    - name: Install guest agent
+      ansible.builtin.apt:
+        name: qemu-guest-agent
+      become: true
+      vars:
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new" # Host is new. Auto-accept key
+
+    - name: Start and enable guest agent
+      ansible.builtin.systemd:
+        name: qemu-guest-agent
+        state: started
+        enabled: true
+      become: true
