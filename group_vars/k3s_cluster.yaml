@@ -1,0 +1,4 @@
+---
+ansible_user: "{{ vm_ssh_user }}"
+ansible_become_pass: "{{ vm_ssh_pass }}"
+k3s_config_path: /etc/rancher/k3s/k3s.yaml

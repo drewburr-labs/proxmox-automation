@@ -1,0 +1,8 @@
+---
+pihole:
+  hosts:
+    pihole.drewburr.com:
+
+proxmox:
+  hosts:
+    localhost:

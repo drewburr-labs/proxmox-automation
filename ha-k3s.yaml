@@ -1,0 +1,58 @@
+- name: Setup dynamic inventory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Add VMs to inventory
+      ansible.builtin.add_host:
+        hostname: "{{ vm_dns_name }}"
+        groups: k3s_cluster
+        ansible_host: "{{ vm_dns_name }}"
+        k3s_control_node: true # Install all hosts as controlplane nodes
+      vars:
+        vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
+      loop: "{{ vms }}"
+
+- name: Build a cluster with HA control plane
+  hosts: k3s_cluster
+  tags:
+    - always
+    - build
+  vars:
+    k3s_become: true
+    k3s_etcd_datastore: true
+    k3s_install_hard_links: true
+    k3s_release_version: v1.25.11+k3s1
+  roles:
+    - role: xanmanning.k3s
+
+- hosts: k3s_cluster
+  gather_facts: false
+
+  vars:
+    cluster_name: k3s
+    cluster_dns_name: "{{ cluster_name }}.{{ dns_domain }}"
+
+  tasks:
+    - name: Register host IP to K8s DNS name
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: present
+        dns_name: "{{ cluster_dns_name }}"
+        ip_address: "{{ lookup('community.general.dig', '{{ ansible_host }}')}}"
+        force: true
+        ansible_user: "{{ pihole_ssh_user }}"
+        ansible_ssh_pass: "{{ pihole_ssh_pass }}"
+
+    - name: Copy k3s config from primary to local
+      ansible.builtin.fetch:
+        src: "{{ k3s_config_path }}"
+        dest: ./k3s-config.yaml
+      become: true
+      when:
+        - k3s_primary_control_node is defined
+        - k3s_primary_control_node
