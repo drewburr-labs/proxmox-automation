@@ -11,13 +11,23 @@
     search_string: "{{ item }}"
   check_mode: true
   register: dns_check_res
-  failed_when: (dns_check_res is changed and fail_if_found) or (dns_check_res is failed)
+  failed_when: (dns_check_res is changed and fail_if_found and not force) or dns_check_res is failed
   loop:
     - "{{ dns_name }}"
     - "{{ ip_address }}"
   when:
     - state == "present"
-    - not force
+
+- name: Ensure DNS reservation does not already exist
+  ansible.builtin.lineinfile:
+    path: "{{ pihole_custom_dns_configs }}"
+    state: absent
+    search_string: "{{ ip_address }} {{ dns_name }}"
+  check_mode: true
+  register: dns_exists_check_res
+  failed_when: (dns_exists_check_res is changed and fail_if_found and not force) or (dns_check_res is failed)
+  when:
+    - state == "present"
 
 - name: Set DNS record
   community.docker.docker_container_exec:
@@ -27,6 +37,7 @@
   when:
     - state == "present"
     - dns_check_res is not changed or force
+    - dns_exists_check_res is not changed
 
 - name: Delete DNS record
   community.docker.docker_container_exec:
