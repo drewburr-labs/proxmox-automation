@@ -2,6 +2,8 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  tags:
+    - always
 
   tasks:
     - name: Add VMs to inventory
@@ -17,7 +19,6 @@
 - name: Build a cluster with HA control plane
   hosts: k3s_cluster
   tags:
-    - always
     - build
   vars:
     k3s_become: true
@@ -47,12 +48,35 @@
         force: true
         ansible_user: "{{ pihole_ssh_user }}"
         ansible_ssh_pass: "{{ pihole_ssh_pass }}"
+      tags:
+        - dns
 
     - name: Copy k3s config from primary to local
-      ansible.builtin.fetch:
+      run_once: true
+      ansible.builtin.slurp:
         src: "{{ k3s_config_path }}"
-        dest: ./k3s-config.yaml
+      register: k3s_config_slurp
       become: true
-      when:
-        - k3s_primary_control_node is defined
-        - k3s_primary_control_node
+
+    - name: Decode slurp result
+      run_once: true
+      set_fact:
+        k3s_config: "{{ k3s_config_slurp.content | b64decode | from_yaml }}"
+      run_once: true
+
+    - name: Save k3s config with cluster hostname
+      run_once: true
+      ansible.builtin.copy:
+        dest: ./k3s-config.yaml
+        content: "{{ config_content | to_nice_yaml(indent=2) }}"
+      vars:
+        config_content: "{{ k3s_config | combine(config_update) }}"
+        config_update:
+          clusters:
+            - "{{ k3s_config.clusters[0] | combine(cluster_update) }}"
+        cluster_update:
+          cluster:
+            server: https://{{ cluster_dns_name }}:6443
+            insecure-skip-tls-verify: true # Ignore invalid cert
+        ansible_connection: local # Force copy to local
+      delegate_to: localhost
