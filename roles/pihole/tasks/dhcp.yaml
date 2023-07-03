@@ -1,0 +1,39 @@
+---
+- name: Validate IP address
+  fail:
+    msg: "Invalid IPv4 address: {{ ip_address }}"
+  when:
+    - state == "present"
+    - ip_address is not ansible.utils.ipv4
+
+- name: Ensure DHCP reservation is unused
+  ansible.builtin.lineinfile:
+    path: "{{ pihole_static_dhcp_configs }}"
+    state: absent
+    search_string: "{{ item }}"
+  check_mode: true
+  register: dhcp_check_res
+  failed_when: (dhcp_check_res is changed and fail_if_found) or (dhcp_check_res is failed)
+  when: item
+  loop:
+    - "{{ dns_name }}"
+    - "{{ ip_address }}"
+    - "{{ formatted_mac_address }}"
+  when:
+    - state == "present"
+    - not force
+
+- name: Set static IP
+  community.docker.docker_container_exec:
+    container: pihole
+    command: /bin/bash -c "pihole -a addstaticdhcp {{ formatted_mac_address }} {{ ip_address }} {{ dns_name }}"
+  when:
+    - state == "present"
+    - dhcp_check_res is not changed or force
+
+- name: Delete static IP
+  community.docker.docker_container_exec:
+    container: pihole
+    command: /bin/bash -c "pihole -a removestaticdhcp {{ formatted_mac_address }}"
+  when:
+    - state == "absent"

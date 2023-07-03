@@ -1,0 +1,104 @@
+---
+- hosts: localhost
+  gather_facts: false
+
+  vars:
+    ipv4: 192.168.4.30
+    ipv4_2: 192.168.4.31
+    dnsname: drewisawesome.drewburr.com
+    dnsname_2: drewisawesome2.drewburr.com
+    mac: aa:aa:aa:bb:bb:bb
+
+  tasks:
+    - name: Register new DNS name
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: present
+        ip_address: "{{ ipv4 }}"
+        dns_name: "{{ dnsname }}"
+
+    - name: Register new DNS name and skip error
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: present
+        ip_address: "{{ ipv4 }}"
+        dns_name: "{{ dnsname }}"
+        fail_if_found: false
+
+    - name: Force register duplicate DNS name
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: present
+        ip_address: "{{ ipv4 }}"
+        dns_name: "{{ dnsname_2 }}"
+        force: true
+
+    - name: Force register duplicate IP address
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: present
+        ip_address: "{{ ipv4_2 }}"
+        dns_name: "{{ dnsname }}"
+        force: true
+
+    - name: Delete DNS name
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: absent
+        ip_address: "{{ ipv4 }}"
+        dns_name: "{{ dnsname }}"
+
+    - name: Delete duplicate DNS name
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: absent
+        ip_address: "{{ ipv4 }}"
+        dns_name: "{{ dnsname_2 }}"
+
+    - name: Delete duplicate IP address
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: absent
+        ip_address: "{{ ipv4_2 }}"
+        dns_name: "{{ dnsname }}"
+
+    - name: Register new DHCP address
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dhcp
+      vars:
+        state: present
+        ip_address: "{{ ipv4 }}"
+        dns_name: "{{ dnsname }}"
+        mac_address: "{{ mac }}"
+
+    - name: Delete DHCP address
+      delegate_to: pihole.drewburr.com
+      import_role:
+        name: pihole
+        tasks_from: dhcp
+      vars:
+        state: absent
+        mac_address: "{{ mac }}"

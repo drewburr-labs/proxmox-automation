@@ -117,46 +117,27 @@
     - pihole
 
   tasks:
-    - name: "Ensure DNS reservation is safe"
+    - name: Register DNS name
       delegate_to: pihole.drewburr.com
-      ansible.builtin.lineinfile:
-        path: "{{ pihole_custom_dns_configs }}"
-        state: absent
-        search_string: "{{ item }}"
-      check_mode: true
-      register: dns_check_res
-      failed_when: (dns_check_res is changed) or (dns_check_res is failed)
-      loop:
-        - "{{ vm_dns_name }}"
-        - "{{ vm_ip_address }}"
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: present
+        dns_name: "{{ vm_dns_name }}"
+        ip_address: "{{ vm_ip_address }}"
 
-    - name: "Ensure DHCP reservation is safe"
+    - name: Register DHCP address
       delegate_to: pihole.drewburr.com
-      ansible.builtin.lineinfile:
-        path: "{{ pihole_static_dhcp_configs }}"
-        state: absent
-        search_string: "{{ item }}"
-      check_mode: true
-      register: dhcp_check_res
-      failed_when: (dhcp_check_res is changed) or (dhcp_check_res is failed)
-      loop:
-        - "{{ vm_dns_name }}"
-        - "{{ vm_ip_address }}"
-        - "{{ vm_mac_address }}"
-
-    - name: Set static IP
-      delegate_to: pihole.drewburr.com
-      community.docker.docker_container_exec:
-        container: pihole
-        command: /bin/bash -c "pihole -a addstaticdhcp {{ vm_mac_address }} {{ vm_ip_address }} {{ vm_dns_name }}"
-      register: ip_reservation_result
-
-    - name: Set DNS record
-      delegate_to: pihole.drewburr.com
-      community.docker.docker_container_exec:
-        container: pihole
-        command: /bin/bash -c "pihole -a addcustomdns {{ vm_ip_address }} {{ vm_dns_name }}"
-      register: dns_creation_result
+      import_role:
+        name: pihole
+        tasks_from: dhcp
+      vars:
+        state: present
+        dns_name: "{{ vm_dns_name }}"
+        ip_address: "{{ vm_ip_address }}"
+        mac_address: "{{ vm_mac_address }}"
+        fail_if_found: false
 
 - hosts: proxmox_vm
   connection: local
@@ -234,3 +215,6 @@
         state: started
         enabled: true
       become: true
+
+    - name: Restart VM
+      ansible.builtin.reboot:

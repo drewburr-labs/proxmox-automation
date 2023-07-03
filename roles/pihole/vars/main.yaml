@@ -1,0 +1,5 @@
+---
+pihole_config_dir: /home/pi/Desktop/docker-pi-hole
+pihole_static_dhcp_configs: "{{ pihole_config_dir }}/etc-dnsmasq.d/04-pihole-static-dhcp.conf"
+pihole_custom_dns_configs: "{{ pihole_config_dir }}/etc-pihole/custom.list"
+formatted_mac_address: "{{ mac_address | ansible.utils.hwaddr | upper | replace('NONE', '') }}"

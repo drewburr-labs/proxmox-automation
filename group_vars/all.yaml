@@ -6,7 +6,3 @@ ipv4_gateway: 192.168.4.1
 ipv4_cidr: 23
 # Proxmox
 pmox_url: "{{ pmox_node }}.{{ dns_domain }}"
-# Pihole
-pihole_config_dir: /home/pi/Desktop/docker-pi-hole
-pihole_static_dhcp_configs: "{{ pihole_config_dir }}/etc-dnsmasq.d/04-pihole-static-dhcp.conf"
-pihole_custom_dns_configs: "{{ pihole_config_dir }}/etc-pihole/custom.list"

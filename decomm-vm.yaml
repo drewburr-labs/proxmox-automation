@@ -78,12 +78,14 @@
     - pihole
 
   tasks:
-    - name: Delete static IP
+    - name: Delete DHCP address
       delegate_to: pihole.drewburr.com
-      community.docker.docker_container_exec:
-        container: pihole
-        command: /bin/bash -c "pihole -a removestaticdhcp {{ vm_mac_address }}"
-      register: ip_reservation_result
+      import_role:
+        name: pihole
+        tasks_from: dhcp
+      vars:
+        state: absent
+        mac_address: "{{ vm_mac_address }}"
       when: vm_mac_address is defined
 
     - name: Get VM IP
@@ -91,12 +93,15 @@
       set_fact:
         ip_address: "{{ lookup('community.general.dig', '{{ vm_dns_name }}')}}"
 
-    - name: Delete DNS record
+    - name: Delete DNS name
       delegate_to: pihole.drewburr.com
-      community.docker.docker_container_exec:
-        container: pihole
-        command: /bin/bash -c "pihole -a removecustomdns {{ ip_address }} {{ vm_dns_name }}"
-      register: dns_creation_result
+      import_role:
+        name: pihole
+        tasks_from: dns
+      vars:
+        state: absent
+        ip_address: "{{ ip_address }}"
+        dns_name: "{{ vm_dns_name }}"
       when: ip_address != "NXDOMAIN"
 
 - hosts: proxmox_vm

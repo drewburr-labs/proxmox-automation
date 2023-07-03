@@ -1,0 +1,4 @@
+---
+fail_if_found: true # Fail if record already exists
+force: false # Force creation of record
+mac_address: ''
