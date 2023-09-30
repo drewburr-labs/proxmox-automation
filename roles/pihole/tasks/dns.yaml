@@ -4,19 +4,19 @@
     msg: "Invalid IPv4 address: {{ ip_address }}"
   when: "{{ ip_address is not ansible.utils.ipv4 }}"
 
-- name: Ensure DNS reservation is unused
-  ansible.builtin.lineinfile:
-    path: "{{ pihole_custom_dns_configs }}"
-    state: absent
-    search_string: "{{ item }}"
-  check_mode: true
-  register: dns_check_res
-  failed_when: (dns_check_res is changed and fail_if_found and not force) or dns_check_res is failed
-  loop:
-    - "{{ dns_name }}"
-    - "{{ ip_address }}"
-  when:
-    - state == "present"
+# - name: Ensure DNS reservation is unused
+#   ansible.builtin.lineinfile:
+#     path: "{{ pihole_custom_dns_configs }}"
+#     state: absent
+#     search_string: "{{ item }}"
+#   check_mode: true
+#   register: dns_check_res
+#   failed_when: (dns_check_res is changed and fail_if_found and not force) or dns_check_res is failed
+#   loop:
+#     - "{{ dns_name }}"
+#     - "{{ ip_address }}"
+#   when:
+#     - state == "present"
 
 - name: Ensure DNS reservation does not already exist
   ansible.builtin.lineinfile:
@@ -25,7 +25,7 @@
     search_string: "{{ ip_address }} {{ dns_name }}"
   check_mode: true
   register: dns_exists_check_res
-  failed_when: (dns_exists_check_res is changed and fail_if_found and not force) or (dns_check_res is failed)
+  failed_when: (dns_exists_check_res is changed and fail_if_found and not force) # or (dns_check_res is failed)
   when:
     - state == "present"
 
@@ -36,7 +36,7 @@
   register: dns_creation_result
   when:
     - state == "present"
-    - dns_check_res is not changed or force
+    #- dns_check_res is not changed or force
     - dns_exists_check_res is not changed
 
 - name: Delete DNS record
