@@ -6,3 +6,4 @@ ipv4_gateway: 192.168.4.1
 ipv4_cidr: 23
 # Proxmox
 pmox_url: "{{ pmox_node }}.{{ dns_domain }}"
+ansible_python_interpreter: auto
