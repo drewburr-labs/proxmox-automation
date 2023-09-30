@@ -1,12 +1,28 @@
 ---
 # Required vars:
-# vms - List of data to create new VMs { name, ip_address, hdd_size, (opt) destination_node }
-# pmox_node - Required if unset in `vms`
+# vms - List of data to create new VMs { name, ip_address, hdd_size, destination_node }
 - hosts: localhost
   connection: local
   gather_facts: false
 
   tasks:
+  - name: Get API ticket
+    ansible.builtin.uri:
+      url: "https://{{ pmox_url }}:8006/api2/json/access/ticket"
+      method: POST
+      validate_certs: false
+      force_basic_auth: true
+      body_format: json
+      body:
+        username: "{{ pmox_user }}"
+        password: "{{ pmox_password }}"
+    register: pmox_ticket_request
+
+  - name: Register ticket
+    set_fact:
+      pmox_ticket: "{{ pmox_ticket_request.json.data.ticket }}"
+      pmox_token: "{{ pmox_ticket_request.json.data.CSRFPreventionToken }}"
+
   - name: Add VM hostname to inventory
     ansible.builtin.add_host:
       hostname: "{{ vm_dns_name }}"
@@ -14,11 +30,13 @@
       vm_name: "{{ item.name }}"
       vm_ip_address: "{{ item.ip_address }}"
       vm_hdd_size: "{{ item.hdd_size }}"
-      pmox_node: "{{ item.destination_node | default(pmox_node) }}"
+      destination_node: "{{ item.destination_node }}"
+      pmox_ticket: "{{ pmox_ticket }}"
+      pmox_token: "{{ pmox_token }}"
     vars:
       vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
     loop: "{{ vms }}"
-
+    changed_when: false
 
 - hosts: proxmox_vm
   connection: local
@@ -30,66 +48,59 @@
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
-      node: "{{ pmox_node }}"
+
+    community.general.proxmox_vm_info:
+      api_user: "{{ pmox_user }}"
+      api_password: "{{ pmox_password }}"
+      api_host: "{{ pmox_url }}"
 
   tasks:
+    - name: Get template data
+      include_role:
+        name: proxmox
+        tasks_from: get_vm_config
+      vars:
+        vm_name: "{{ template_name }}"
+
     - name: Clone VM
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
         clone: "{{ template_name }}"
+        vmid: "{{ vm_data.vmid }}"
+        node: "{{ vm_data.node }}"
+        # storage: "{{ vm_target_storage }}"
         timeout: 300
       register: clone_result
       tags:
         - create
       throttle: 1 # Clone one host at a time
 
-    - name: Get VM state
+    - name: Migrate VM to destination node
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
-        state: current
-      register: vm_state
-      until:
-        - not vm_state.failed
+        node: "{{ destination_node }}"
+        migrate: true
+      register: migrate_vm_result
+      until: migrate_vm_result is not failed
 
-    - ansible.builtin.debug:
-        var: vm_state
-
-    - name: Get API ticket
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/access/ticket"
-        method: POST
-        validate_certs: false
-        force_basic_auth: true
-        body_format: json
-        body:
-          username: "{{ pmox_user }}"
-          password: "{{ pmox_password }}"
-      register: pmox_ticket_request
-
-    - name: Register ticket
-      set_fact:
-        pmox_ticket: "{{ pmox_ticket_request.json.data.ticket }}"
-        pmox_token: "{{ pmox_ticket_request.json.data.CSRFPreventionToken }}"
-
-    - name: Get VM configuration
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ pmox_node }}/qemu/{{ vm_state.vmid }}/config"
-        method: GET
-        validate_certs: false
-        force_basic_auth: true
-        headers:
-          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
-      register: vm_config
+    - name: Get VM config
+      include_role:
+        name: proxmox
+        tasks_from: get_vm_config
 
     - name: Register VM MAC address
       set_fact:
         vm_mac_address: "{{ vm_net0.virtio }}"
       vars:
-        vm_net0: "{{ vm_config.json.data.net0 | split(',') | map('split', '=') | items2dict(key_name=0, value_name=1) }}"
+        vm_net0: "{{ vm_config.net0 | split(',') | map('split', '=') | items2dict(key_name=0, value_name=1) }}"
+
+    - name: Register VM disk space
+      set_fact:
+        vm_scsi0_size: "{{ (vm_config.scsi0 | split('='))[1] }}" # ceph-pool:vm-103-disk-0,size=50G
 
     - name: Update VM disk space
       ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ pmox_node }}/qemu/{{ vm_state.vmid }}/resize"
+        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/resize"
         method: PUT
         validate_certs: false
         force_basic_auth: true
@@ -100,7 +111,8 @@
         body:
           disk: scsi0
           size: "{{ vm_hdd_size }}"
-      when: clone_result is changed
+      changed_when: true
+      when: vm_scsi0_size != vm_hdd_size
 
     # - name: Share data with pihole
     #   set_fact:
@@ -110,34 +122,35 @@
     #   delegate_to: pihole.drewburr.com
     #   delegate_facts: true
 
-- hosts: proxmox_vm
-  gather_facts: false
-  tags:
-    - always
-    - pihole
+# - hosts: proxmox_vm
+#   gather_facts: false
+#   tags:
+#     - always
+#     - pihole
 
-  tasks:
-    - name: Register DNS name
-      delegate_to: pihole.drewburr.com
-      import_role:
-        name: pihole
-        tasks_from: dns
-      vars:
-        state: present
-        dns_name: "{{ vm_dns_name }}"
-        ip_address: "{{ vm_ip_address }}"
+#   tasks:
+#     - name: Register DNS name
+#       delegate_to: pihole.drewburr.com
+#       import_role:
+#         name: pihole
+#         tasks_from: dns
+#       vars:
+#         state: present
+#         dns_name: "{{ vm_dns_name }}"
+#         ip_address: "{{ vm_ip_address }}"
+#         fail_if_found: false
 
-    - name: Register DHCP address
-      delegate_to: pihole.drewburr.com
-      import_role:
-        name: pihole
-        tasks_from: dhcp
-      vars:
-        state: present
-        dns_name: "{{ vm_dns_name }}"
-        ip_address: "{{ vm_ip_address }}"
-        mac_address: "{{ vm_mac_address }}"
-        fail_if_found: false
+#     - name: Register DHCP address
+#       delegate_to: pihole.drewburr.com
+#       import_role:
+#         name: pihole
+#         tasks_from: dhcp
+#       vars:
+#         state: present
+#         dns_name: "{{ vm_dns_name }}"
+#         ip_address: "{{ vm_ip_address }}"
+#         mac_address: "{{ vm_mac_address }}"
+#         fail_if_found: false
 
 - hosts: proxmox_vm
   connection: local
@@ -149,12 +162,11 @@
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
-      node: "{{ pmox_node }}"
 
   tasks:
     - name: Set static IP on VM
       ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ pmox_node }}/qemu/{{ vm_state.vmid }}/config"
+        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/config"
         method: PUT
         validate_certs: false
         force_basic_auth: true
@@ -189,25 +201,33 @@
         port: 22
         host: "{{ vm_dns_name }}"
         search_regex: OpenSSH
-        delay: 10
       register: ssh_wait_res
       failed_when:
         - ssh_wait_res is failed
       vars:
-        vm_name: "{{ item.name }}" # # Needed to generate vm_dns_name
+        vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
       loop: "{{ vms }}"
-
 
 - hosts: proxmox_vm
   gather_facts: false
 
   tasks:
+    - name: Clear host from known_host
+      ansible.builtin.command:
+        cmd: ssh-keygen -R "{{ vm_dns_name }}"
+      vars:
+        ansible_connection: local
+      throttle: 1 # Avoid stepping on eachother
+
     - name: Install guest agent
       ansible.builtin.apt:
         name: qemu-guest-agent
       become: true
       vars:
         ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new" # Host is new. Auto-accept key
+      register: agent_install_result
+      until: agent_install_result is not failed
+      retries: 5
 
     - name: Start and enable guest agent
       ansible.builtin.systemd:
@@ -218,3 +238,4 @@
 
     - name: Restart VM
       ansible.builtin.reboot:
+      become: true
