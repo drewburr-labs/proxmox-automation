@@ -8,14 +8,35 @@
     - always
 
   tasks:
+  - name: Get API ticket
+    ansible.builtin.uri:
+      url: "https://{{ pmox_url }}:8006/api2/json/access/ticket"
+      method: POST
+      validate_certs: false
+      force_basic_auth: true
+      body_format: json
+      body:
+        username: "{{ pmox_user }}"
+        password: "{{ pmox_password }}"
+    register: pmox_ticket_request
+
+  - name: Register ticket
+    set_fact:
+      pmox_ticket: "{{ pmox_ticket_request.json.data.ticket }}"
+      pmox_token: "{{ pmox_ticket_request.json.data.CSRFPreventionToken }}"
+
   - name: Add VM hostname to inventory
     ansible.builtin.add_host:
       hostname: "{{ vm_dns_name }}"
       groups: proxmox_vm
       vm_name: "{{ item.name }}"
+      # pmox_node: "{{ item.destination_node }}"
+      pmox_ticket: "{{ pmox_ticket }}"
+      pmox_token: "{{ pmox_token }}"
     vars:
       vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
     loop: "{{ vms }}"
+    changed_when: false
 
 - hosts: proxmox_vm
   connection: local
@@ -27,82 +48,53 @@
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
-      node: "{{ pmox_node }}"
 
   tasks:
-    - name: Get VM state
-      community.general.proxmox_kvm:
-        name: "{{ vm_name }}"
-        state: current
-      register: vm_state
-      until:
-        - not vm_state.failed
-
-    - name: Get API ticket
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/access/ticket"
-        method: POST
-        validate_certs: false
-        force_basic_auth: true
-        body_format: json
-        body:
-          username: "{{ pmox_user }}"
-          password: "{{ pmox_password }}"
-      register: pmox_ticket_request
-
-    - name: Register ticket
-      set_fact:
-        pmox_ticket: "{{ pmox_ticket_request.json.data.ticket }}"
-        pmox_token: "{{ pmox_ticket_request.json.data.CSRFPreventionToken }}"
-
     - name: Get VM configuration
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ pmox_node }}/qemu/{{ vm_state.vmid }}/config"
-        method: GET
-        validate_certs: false
-        force_basic_auth: true
-        headers:
-          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
-      register: vm_config
+      import_role:
+        name: proxmox
+        tasks_from: get_vm_config
+      ignore_errors: true
 
     - name: Register VM MAC address
       set_fact:
         vm_mac_address: "{{ vm_net0.virtio }}"
       vars:
-        vm_net0: "{{ vm_config.json.data.net0 | split(',') | map('split', '=') | items2dict(key_name=0, value_name=1) }}"
+        vm_net0: "{{ vm_config.net0 | split(',') | map('split', '=') | items2dict(key_name=0, value_name=1) }}"
+      when: vm_config is defined and vm_config is not failed
 
-- hosts: proxmox_vm
-  gather_facts: false
-  tags:
-    - always
-    - pihole
+# - hosts: proxmox_vm
+#   gather_facts: false
+#   tags:
+#     - always
+#     - pihole
 
-  tasks:
-    - name: Delete DHCP address
-      delegate_to: pihole.drewburr.com
-      import_role:
-        name: pihole
-        tasks_from: dhcp
-      vars:
-        state: absent
-        mac_address: "{{ vm_mac_address }}"
-      when: vm_mac_address is defined
+#   tasks:
+#     - name: Delete DHCP address
+#       delegate_to: pihole.drewburr.com
+#       import_role:
+#         name: pihole
+#         tasks_from: dhcp
+#       vars:
+#         state: absent
+#         mac_address: "{{ vm_mac_address }}"
+#       when: vm_mac_address is defined
 
-    - name: Get VM IP
-      delegate_to: pihole.drewburr.com
-      set_fact:
-        ip_address: "{{ lookup('community.general.dig', '{{ vm_dns_name }}')}}"
+#     - name: Get VM IP
+#       delegate_to: pihole.drewburr.com
+#       set_fact:
+#         ip_address: "{{ lookup('community.general.dig', '{{ vm_dns_name }}')}}"
 
-    - name: Delete DNS name
-      delegate_to: pihole.drewburr.com
-      import_role:
-        name: pihole
-        tasks_from: dns
-      vars:
-        state: absent
-        ip_address: "{{ ip_address }}"
-        dns_name: "{{ vm_dns_name }}"
-      when: ip_address != "NXDOMAIN"
+#     - name: Delete DNS name
+#       delegate_to: pihole.drewburr.com
+#       import_role:
+#         name: pihole
+#         tasks_from: dns
+#       vars:
+#         state: absent
+#         ip_address: "{{ ip_address }}"
+#         dns_name: "{{ vm_dns_name }}"
+#       when: ip_address != "NXDOMAIN"
 
 - hosts: proxmox_vm
   connection: local
@@ -114,26 +106,32 @@
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
-      node: "{{ pmox_node }}"
 
   tasks:
     - name: Force stop VM
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
+        node: "{{ vm_data.node }}"
         state: stopped
         force: true
+      when: vm_config is defined
+
 
     - name: Wait until VM is fully stopped
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
+        node: "{{ vm_data.node }}"
         state: current
       register: vm_state
       until:
         - vm_state.status == "stopped"
+      when: vm_config is defined
 
     - name: Delete VM
       community.general.proxmox_kvm:
         name: "{{ vm_name }}"
+        node: "{{ vm_data.node }}"
         state: absent
         force: true
         timeout: 60
+      when: vm_config is defined
