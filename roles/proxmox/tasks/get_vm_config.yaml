@@ -1,0 +1,31 @@
+---
+- name: Get cluster VMs
+  ansible.builtin.uri:
+    url: "https://{{ pmox_url }}:8006/api2/json/cluster/resources?type=vm"
+    method: GET
+    validate_certs: false
+    force_basic_auth: true
+    headers:
+      Authorization: "PVEAuthCookie={{ pmox_ticket }}"
+  register: cluster_vms
+
+- name: Register VM data
+  set_fact:
+    vm_data: "{{ resource_data[0] }}"
+  vars:
+    resource_data: "{{ cluster_vms.json | community.general.json_query(query) }}"
+    query: "data[?name=='{{ vm_name }}']"
+
+- name: Get VM configuration
+  ansible.builtin.uri:
+    url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/config"
+    method: GET
+    validate_certs: false
+    force_basic_auth: true
+    headers:
+      Authorization: "PVEAuthCookie={{ pmox_ticket }}"
+  register: vm_config_res
+
+- name: Register config data
+  set_fact:
+    vm_config: "{{ vm_config_res.json.data }}"
