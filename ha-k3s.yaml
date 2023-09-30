@@ -11,10 +11,11 @@
         hostname: "{{ vm_dns_name }}"
         groups: k3s_cluster
         ansible_host: "{{ vm_dns_name }}"
-        k3s_control_node: true # Install all hosts as controlplane nodes
+        k3s_control_node: "{{ item.k3s_control_node | default(false) }}"
       vars:
         vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
       loop: "{{ vms }}"
+      changed_when: false
 
 - name: Build a cluster with HA control plane
   hosts: k3s_cluster
