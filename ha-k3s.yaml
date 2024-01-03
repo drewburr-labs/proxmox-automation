@@ -31,7 +31,7 @@
         - servicelb
         - traefik
         - helm-controller
-        # - metrics-server
+        - metrics-server
   roles:
     - role: xanmanning.k3s
 
