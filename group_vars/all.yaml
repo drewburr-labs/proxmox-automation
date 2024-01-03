@@ -7,3 +7,4 @@ ipv4_cidr: 23
 # Proxmox
 pmox_url: "{{ pmox_node }}.{{ dns_domain }}"
 ansible_python_interpreter: auto
+kube_storage_lvm: kube-storage
