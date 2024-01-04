@@ -30,6 +30,8 @@
       vm_name: "{{ item.name }}"
       vm_ip_address: "{{ item.ip_address }}"
       vm_hdd_size: "{{ item.hdd_size }}"
+      vm_cpu: "{{ item.vm_cpu }}"
+      vm_memory_mb: "{{ item.vm_memory_mb }}"
       destination_node: "{{ item.destination_node }}"
       pmox_ticket: "{{ pmox_ticket }}"
       pmox_token: "{{ pmox_token }}"
@@ -68,7 +70,6 @@
         clone: "{{ template_name }}"
         vmid: "{{ vm_data.vmid }}"
         node: "{{ vm_data.node }}"
-        # storage: "{{ vm_target_storage }}"
         timeout: 300
       register: clone_result
       tags:
@@ -88,16 +89,34 @@
         name: proxmox
         tasks_from: get_vm_config
 
+    - name: Register VM config values
+      set_fact:
+        vm_scsi0_size: "{{ (vm_config.scsi0 | split('='))[1] }}" # ceph-pool:vm-103-disk-0,size=50G
+        vm_scsi1_size: "{{ (vm_config.scsi1 | default('=') | split('='))[1] }}"
+        vm_cpu_assigned: "{{ vm_config.cores }}"
+        vm_memory_assigned: "{{ vm_config.memory }}"
+
+    - name: Update VM CPU and memory
+      ansible.builtin.uri:
+        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/config"
+        method: POST
+        validate_certs: false
+        force_basic_auth: true
+        headers:
+          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
+          CSRFPreventionToken: "{{ pmox_token }}"
+        body_format: json
+        body:
+          cores: "{{ vm_cpu }}"
+          memory: "{{ vm_memory_mb }}"
+      changed_when: true
+      when: (vm_cpu_assigned != vm_cpu) or (vm_memory_assigned != vm_memory_mb)
+
     - name: Register VM MAC address
       set_fact:
         vm_mac_address: "{{ vm_net0.virtio }}"
       vars:
         vm_net0: "{{ vm_config.net0 | split(',') | map('split', '=') | items2dict(key_name=0, value_name=1) }}"
-
-    - name: Register VM disk space
-      set_fact:
-        vm_scsi0_size: "{{ (vm_config.scsi0 | split('='))[1] }}" # ceph-pool:vm-103-disk-0,size=50G
-        vm_scsi1_size: "{{ (vm_config.scsi1 | default('=') | split('='))[1] }}"
 
     - name: Update VM disk space
       ansible.builtin.uri:
