@@ -20,3 +20,9 @@ vms: # Only `name` is required for decomm
   vm_cpu: 1
   vm_memory_mb: 1024
 ```
+
+## Installing K3s
+
+Before installing K3s with this repository's configuration, certifiactes must be generated using [files/gencert.sh](./files/gencert.sh). Afterwards, the `copy-certificate.yaml` playbook can be run to install the CA on the target nodes. The remining certs can be used for Dex.
+
+After certificates have been installed, `ha-k3s.yaml` may be used to install K3s.

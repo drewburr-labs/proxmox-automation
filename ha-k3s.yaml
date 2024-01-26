@@ -32,6 +32,13 @@
         - traefik
         - helm-controller
         - metrics-server
+      kube-apiserver-arg:
+      #   - "feature-gates=RemoveSelfLink=false"
+        - "oidc-issuer-url=https://dex.drewburr.com:32000"
+        - "oidc-client-id=k3s-client"
+        - "oidc-ca-file=/etc/ssl/certs/dex-ca.pem"
+        - "oidc-username-claim=email"
+        - "oidc-groups-claim=groups"
   roles:
     - role: xanmanning.k3s
 
