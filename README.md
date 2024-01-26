@@ -5,16 +5,18 @@ Example vars.yaml
 ```yaml
 pmox_user: root@pam
 pmox_password: supersecretpassword
-pmox_url: pve.example.com
+pmox_node: pve-node-1 # The name of any node for API call handling
 
-# Clone/Provision
 template_name: my-vm-template
 vm_destination_node: pve-node-1
-vm_name: my-new-vm
 vm_ssh_user: drewburr
 vm_ssh_pass: drewburrisawesome
-hdd_size: 30G # \+?\d+(\.\d+)?[KMGT]? : The new size. With the `+` sign the value is added to the actual size of the volume and without it, the value is taken as an absolute one.
-vm_ip_address: 127.0.0.1
-pihole_ssh_user: pi
-pihole_ssh_pass: raspberry
+vms: # Only `name` is required for decomm
+- name: vm-name
+  ip_address: 192.168.0.2
+  hdd_size: 50G # \+?\d+(\.\d+)?[KMGT]? : The new size. With the `+` sign the value is added to the actual size of the volume and without it, the value is taken as an absolute one.
+  destination_node: pve-node-1
+  k3s_control_node: true # Install as K3s controlplane node
+  vm_cpu: 1
+  vm_memory_mb: 1024
 ```
