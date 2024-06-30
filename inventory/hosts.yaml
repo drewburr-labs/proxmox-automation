@@ -6,3 +6,11 @@ pihole:
 proxmox:
   hosts:
     localhost:
+
+proxmox_hosts:
+  hosts:
+    pve01.drewburr.com:
+    pve02.drewburr.com:
+    pve03.drewburr.com:
+    pve04.drewburr.com:
+    pve05.drewburr.com:
