@@ -1,0 +1,64 @@
+---
+# Required vars:
+# vms - List of data to create new VMs { name, ip_address, hdd_size, destination_node }
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+  - name: Get API ticket
+    ansible.builtin.uri:
+      url: "https://{{ pmox_url }}:8006/api2/json/access/ticket"
+      method: POST
+      validate_certs: false
+      force_basic_auth: true
+      body_format: json
+      body:
+        username: "{{ pmox_user }}"
+        password: "{{ pmox_password }}"
+    register: pmox_ticket_request
+
+  - name: Register ticket
+    set_fact:
+      pmox_ticket: "{{ pmox_ticket_request.json.data.ticket }}"
+      pmox_token: "{{ pmox_ticket_request.json.data.CSRFPreventionToken }}"
+
+  - name: Add VM hostname to inventory
+    ansible.builtin.add_host:
+      hostname: "{{ vm_dns_name }}"
+      groups: proxmox_vm
+      vm_name: "{{ item.name }}"
+      vm_ip_address: "{{ item.ip_address }}"
+      vm_hdd_size: "{{ item.hdd_size }}"
+      vm_cpu: "{{ item.vm_cpu }}"
+      vm_memory_mb: "{{ item.vm_memory_mb }}"
+      destination_node: "{{ item.destination_node }}"
+      pmox_ticket: "{{ pmox_ticket }}"
+      pmox_token: "{{ pmox_token }}"
+    vars:
+      vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
+    loop: "{{ vms }}"
+    changed_when: false
+
+- hosts: proxmox_vm
+  connection: local
+  gather_facts: false
+
+  module_defaults:
+    community.general.proxmox_kvm:
+      proxmox_default_behavior: no_defaults
+      api_user: "{{ pmox_user }}"
+      api_password: "{{ pmox_password }}"
+      api_host: "{{ pmox_url }}"
+
+    community.general.proxmox_vm_info:
+      api_user: "{{ pmox_user }}"
+      api_password: "{{ pmox_password }}"
+      api_host: "{{ pmox_url }}"
+
+  tasks:
+    - name: Perform apt upgrade
+      ansible.builtin.apt:
+        autoremove: yes
+        upgrade: yes
+      become: true
