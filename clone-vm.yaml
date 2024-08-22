@@ -32,6 +32,7 @@
       vm_hdd_size: "{{ item.hdd_size }}"
       vm_cpu: "{{ item.vm_cpu }}"
       vm_memory_mb: "{{ item.vm_memory_mb }}"
+      kube_storage_enabled: "{{ item.kube_storage_enabled }}"
       destination_node: "{{ item.destination_node }}"
       pmox_ticket: "{{ pmox_ticket }}"
       pmox_token: "{{ pmox_token }}"
@@ -134,50 +135,53 @@
       changed_when: true
       when: vm_scsi0_size != vm_hdd_size
 
-    - name: Get kube-storage LVM info
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/storage/{{ kube_storage_lvm }}/status"
-        method: GET
-        validate_certs: false
-        force_basic_auth: true
-        headers:
-          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
-          CSRFPreventionToken: "{{ pmox_token }}"
-      register: kube_storage_info
+    - name: Setup up kube-storage
+      when: "{{ kube_storage_enabled | default(true) }}"
+      block:
+        - name: Get kube-storage LVM info
+          ansible.builtin.uri:
+            url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/storage/{{ kube_storage_lvm }}/status"
+            method: GET
+            validate_certs: false
+            force_basic_auth: true
+            headers:
+              Authorization: "PVEAuthCookie={{ pmox_ticket }}"
+              CSRFPreventionToken: "{{ pmox_token }}"
+          register: kube_storage_info
 
-    - name: Mount kube-storage to VM
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/config"
-        method: PUT
-        validate_certs: false
-        force_basic_auth: true
-        headers:
-          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
-          CSRFPreventionToken: "{{ pmox_token }}"
-        body_format: json
-        body:
-          scsi1: "{{ kube_storage_lvm }}:1"
-      changed_when: true
-      when: not vm_scsi1_size
+        - name: Mount kube-storage to VM
+          ansible.builtin.uri:
+            url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/config"
+            method: PUT
+            validate_certs: false
+            force_basic_auth: true
+            headers:
+              Authorization: "PVEAuthCookie={{ pmox_ticket }}"
+              CSRFPreventionToken: "{{ pmox_token }}"
+            body_format: json
+            body:
+              scsi1: "{{ kube_storage_lvm }}:1"
+          changed_when: true
+          when: not vm_scsi1_size
 
-    - name: Update kube-storage disk space
-      ansible.builtin.uri:
-        url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/resize"
-        method: PUT
-        validate_certs: false
-        force_basic_auth: true
-        headers:
-          Authorization: "PVEAuthCookie={{ pmox_ticket }}"
-          CSRFPreventionToken: "{{ pmox_token }}"
-        body_format: json
-        body:
-          disk: scsi1
-          size: "{{ size_bytes }}"
-      vars:
-        size_bytes: "{{ kube_storage_info.json.data.total }}"
-        size_gib: "{{ (size_bytes|int / 1.074e+9) | round(2, 'floor') }}G"
-      changed_when: true
-      when: vm_scsi1_size != size_gib
+        - name: Update kube-storage disk space
+          ansible.builtin.uri:
+            url: "https://{{ pmox_url }}:8006/api2/json/nodes/{{ vm_data.node }}/qemu/{{ vm_data.vmid }}/resize"
+            method: PUT
+            validate_certs: false
+            force_basic_auth: true
+            headers:
+              Authorization: "PVEAuthCookie={{ pmox_ticket }}"
+              CSRFPreventionToken: "{{ pmox_token }}"
+            body_format: json
+            body:
+              disk: scsi1
+              size: "{{ size_bytes }}"
+          vars:
+            size_bytes: "{{ kube_storage_info.json.data.total }}"
+            size_gib: "{{ (size_bytes|int / 1.074e+9) | round(2, 'floor') }}G"
+          changed_when: true
+          when: vm_scsi1_size != size_gib
 
     # - name: Share data with pihole
     #   set_fact:
@@ -304,3 +308,4 @@
     - name: Restart VM
       ansible.builtin.reboot:
       become: true
+      throttle: 1 # Restart one host at a time
