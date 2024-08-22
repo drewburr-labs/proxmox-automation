@@ -1,0 +1,4 @@
+---
+ansible_user: root
+ansible_ssh_pass: "{{ pmox_password }}"
+# ansible_become_pass: "{{ vm_ssh_pass }}"
