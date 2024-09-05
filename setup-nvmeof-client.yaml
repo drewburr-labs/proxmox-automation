@@ -1,0 +1,64 @@
+---
+# Required vars:
+# vms - List of data to create new VMs
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+  - name: Add VM hostname to inventory
+    ansible.builtin.add_host:
+      hostname: "{{ vm_dns_name }}"
+      groups: proxmox_vm
+    vars:
+      vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
+    loop: "{{ vms }}"
+    changed_when: false
+
+- hosts: proxmox_vm
+  gather_facts: false
+
+  vars:
+    nvme_modules:
+      - nvme
+      - nvme-tcp
+      - nvme-fc
+      - nvme-rdma
+
+  tasks:
+    # Not necessary, but can be helpful when troubleshooting
+    - name: Install nvme-cli
+      ansible.builtin.apt:
+        name: nvme-cli
+        update_cache: yes
+      become: true
+
+    - name: Install nvme fabric modules
+      ansible.builtin.apt:
+        name: linux-generic
+      become: true
+
+    # - name: Create modules directory
+    #   ansible.builtin.file:
+    #     path: /etc/modules-load.d
+    #     state: directory
+    #   become: true
+
+    - name: Create nvme.conf modules file
+      ansible.builtin.file:
+        path: /etc/modules-load.d/nvme.conf
+        state: touch
+      become: true
+
+    - name: Ensure NVMe modules are loaded at boot
+      ansible.builtin.lineinfile:
+        path: /etc/modules-load.d/nvme.conf
+        line: "{{ item }}"
+      become: true
+      loop: "{{ nvme_modules }}"
+
+    - name: Load NVMe modules
+      ansible.builtin.shell:
+        cmd: "modprobe {{ item }}"
+      become: true
+      loop: "{{ nvme_modules }}"
