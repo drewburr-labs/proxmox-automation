@@ -45,21 +45,6 @@
     cluster_dns_name: "{{ cluster_name }}.{{ dns_domain }}"
 
   tasks:
-    # - name: Register host IP to K8s DNS name
-    #   delegate_to: pihole.drewburr.com
-    #   import_role:
-    #     name: pihole
-    #     tasks_from: dns
-    #   vars:
-    #     state: present
-    #     dns_name: "{{ cluster_dns_name }}"
-    #     ip_address: "{{ lookup('community.general.dig', '{{ ansible_host }}')}}"
-    #     force: true
-    #     ansible_user: "{{ pihole_ssh_user }}"
-    #     ansible_ssh_pass: "{{ pihole_ssh_pass }}"
-    #   tags:
-    #     - dns
-
     - name: Copy k3s config from primary to local
       run_once: true
       ansible.builtin.slurp:
