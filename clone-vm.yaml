@@ -32,7 +32,7 @@
       vm_hdd_size: "{{ item.hdd_size }}"
       vm_cpu: "{{ item.vm_cpu }}"
       vm_memory_mb: "{{ item.vm_memory_mb }}"
-      kube_storage_enabled: "{{ item.kube_storage_enabled | default(true) }}"
+      kube_storage_enabled: "{{ item.kube_storage_enabled }}"
       destination_node: "{{ item.destination_node }}"
       pmox_ticket: "{{ pmox_ticket }}"
       pmox_token: "{{ pmox_token }}"
@@ -305,7 +305,7 @@
         enabled: true
       become: true
 
-    - name: Restart VM
-      ansible.builtin.reboot:
-      become: true
-      throttle: 1 # Restart one host at a time
+    # - name: Restart VM
+    #   ansible.builtin.reboot:
+    #   become: true
+    #   throttle: 1 # Restart one host at a time
