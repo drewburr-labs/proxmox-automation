@@ -32,7 +32,7 @@
       vm_hdd_size: "{{ item.hdd_size }}"
       vm_cpu: "{{ item.vm_cpu }}"
       vm_memory_mb: "{{ item.vm_memory_mb }}"
-      kube_storage_enabled: "{{ item.kube_storage_enabled }}"
+      kube_storage_enabled: "{{ item.kube_storage_enabled | default(true) }}"
       destination_node: "{{ item.destination_node }}"
       pmox_ticket: "{{ pmox_ticket }}"
       pmox_token: "{{ pmox_token }}"
