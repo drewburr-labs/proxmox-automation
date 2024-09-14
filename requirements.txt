@@ -3,3 +3,4 @@ requests>=2.27.0
 dnspython>=2.3.0
 netaddr>=0.8.0
 jmespath>=1.0.1
+ansible>=10.4.0
