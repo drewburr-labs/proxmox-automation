@@ -1,5 +1,17 @@
 # proxmox automation
 
+## Setup
+
+```sh
+# Create and activate python venv
+python3 -m venv .venv
+source .venv/bin/activate
+# Install Ansible and other Python dependencies
+pip3 install -r requirements.txt
+# Install Ansible dependencies
+ansible-galaxy install -r roles/requirements.yml
+```
+
 Example vars.yaml
 
 ```yaml
