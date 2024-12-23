@@ -29,3 +29,17 @@
       ansible.builtin.ping:
       vars:
         ansible_ssh_common_args: '-o StrictHostKeyChecking=accept-new' # Host is new. Auto-accept key
+
+- hosts: proxmox_hosts
+  gather_facts: false
+
+  tasks:
+    - name: Clear host from known_host
+      ansible.builtin.command:
+        cmd: ssh-keygen -R "{{ inventory_hostname }}"
+      delegate_to: localhost
+
+    - name: Ping to refresh host key
+      ansible.builtin.ping:
+      vars:
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=accept-new' # Host is new. Auto-accept key
