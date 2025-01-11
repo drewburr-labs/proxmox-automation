@@ -33,6 +33,12 @@
         update_cache: yes
       become: true
 
+    - name: Install nfs client
+      ansible.builtin.apt:
+        name: nfs-common
+        update_cache: yes
+      become: true
+
     - name: Install nvme fabric modules
       ansible.builtin.apt:
         name: linux-generic
