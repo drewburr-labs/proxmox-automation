@@ -1,0 +1,18 @@
+---
+- hosts: proxmox_hosts
+  gather_facts: false
+
+  tasks:
+    - name: Install grub-efi-amd64
+      ansible.builtin.apt:
+        name: grub-efi-amd64
+        state: latest
+        update_cache: true
+
+    - name: Perform apt update and upgrade
+      ansible.builtin.apt:
+        state: latest
+        upgrade: "yes"
+        only_upgrade: true
+        autoremove: true
+      become: true

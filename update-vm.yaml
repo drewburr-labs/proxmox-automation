@@ -41,7 +41,6 @@
     changed_when: false
 
 - hosts: proxmox_vm
-  connection: local
   gather_facts: false
 
   module_defaults:
@@ -57,8 +56,24 @@
       api_host: "{{ pmox_url }}"
 
   tasks:
-    - name: Perform apt upgrade
+    - name: Install guest agent
       ansible.builtin.apt:
-        autoremove: yes
-        upgrade: yes
+        name: qemu-guest-agent
+        state: latest
+        update_cache: true
+      become: true
+
+    - name: Start and enable guest agent
+      ansible.builtin.systemd:
+        name: qemu-guest-agent
+        state: started
+        enabled: true
+      become: true
+
+    - name: Perform apt update and upgrade
+      ansible.builtin.apt:
+        state: latest
+        upgrade: "yes"
+        only_upgrade: true
+        autoremove: true
       become: true
