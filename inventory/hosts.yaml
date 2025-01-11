@@ -14,3 +14,16 @@ proxmox_hosts:
     pve03.drewburr.com:
     pve04.drewburr.com:
     pve05.drewburr.com:
+    pve06.drewburr.com:
+    pve07.drewburr.com:
+    pve08.drewburr.com:
+    pve09.drewburr.com:
+
+node_exporter_vms:
+  hosts:
+    storage01.drewburr.com:
+
+node_exporter_hosts:
+  children:
+    proxmox_hosts:
+    node_exporter_vms:

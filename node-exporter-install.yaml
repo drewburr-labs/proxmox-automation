@@ -1,5 +1,5 @@
 # https://github.com/prometheus-community/ansible
-- hosts: proxmox_hosts
+- hosts: node_exporter_hosts
   gather_facts: true
 
   vars:
