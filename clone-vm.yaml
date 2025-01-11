@@ -29,6 +29,7 @@
       groups: proxmox_vm
       vm_name: "{{ item.name }}"
       vm_ip_address: "{{ item.ip_address }}"
+      vm_storage: "{{ item.storage }}"
       vm_hdd_size: "{{ item.hdd_size }}"
       vm_cpu: "{{ item.vm_cpu }}"
       vm_memory_mb: "{{ item.vm_memory_mb }}"
@@ -71,6 +72,7 @@
         clone: "{{ template_name }}"
         vmid: "{{ vm_data.vmid }}"
         node: "{{ vm_data.node }}"
+        storage: "{{ vm_storage }}"
         timeout: 300
       register: clone_result
       tags:
@@ -287,6 +289,13 @@
       vars:
         ansible_connection: local
       throttle: 1 # Avoid stepping on eachother
+
+    - name: Update all packages to their latest version
+      ansible.builtin.apt:
+        name: "*"
+        state: latest
+        update_cache: true
+      become: true
 
     - name: Install guest agent
       ansible.builtin.apt:
