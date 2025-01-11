@@ -1,0 +1,4 @@
+---
+ansible_user: "{{ vm_ssh_user }}"
+ansible_ssh_pass: "{{ vm_ssh_pass }}"
+ansible_become_pass: "{{ vm_ssh_pass }}"
