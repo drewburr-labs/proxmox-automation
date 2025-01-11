@@ -25,7 +25,7 @@
     k3s_become: true
     k3s_etcd_datastore: true
     k3s_install_hard_links: true
-    k3s_release_version: v1.30.2+k3s1
+    k3s_release_version: v1.31.2+k3s1
     k3s_server:
       # https://docs.k3s.io/cli/server
       disable:
