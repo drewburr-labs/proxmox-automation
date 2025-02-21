@@ -1,0 +1,81 @@
+# https://github.com/prometheus-community/ansible
+- hosts: storage01.drewburr.com
+  gather_facts: true
+
+  vars:
+    zfs_exporter_version: "2.3.6" # https://github.com/pdf/zfs_exporter/
+    zfs_exporter_archive_name: zfs_exporter-{{ zfs_exporter_version }}.linux-amd64
+    zfs_exporter_url: "https://github.com/pdf/zfs_exporter/releases/download/v{{ zfs_exporter_version }}/{{ zfs_exporter_archive_name }}.tar.gz"
+    local_download_path: /tmp
+    remote_binary_path: /usr/local/bin/zfs_exporter
+    service_path: /lib/systemd/system/zfs-exporter.service
+
+  tasks:
+    - name: Download zfs_exporter binary to local folder
+      ansible.builtin.get_url:
+        url: "{{ zfs_exporter_url }}"
+        dest: "{{ local_download_path }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Unpack zfs_exporter binary
+      ansible.builtin.unarchive:
+        src: "{{ local_download_path }}/{{ zfs_exporter_archive_name }}.tar.gz"
+        dest: "{{ local_download_path }}"
+      delegate_to: localhost
+
+    - name: Distribute zfs_exporter
+      ansible.builtin.copy:
+        src: "{{ local_download_path }}/{{ zfs_exporter_archive_name }}/zfs_exporter"
+        dest: "{{ remote_binary_path }}"
+        owner: root
+        group: root
+        mode: '0755'
+      become: true
+
+    - name: Ensure service file exists
+      ansible.builtin.file:
+        path: "{{ service_path }}"
+        owner: root
+        group: root
+        mode: '0644'
+        state: touch
+      become: true
+
+    - name: Create systemd file
+      ansible.builtin.blockinfile:
+        path: "{{ service_path }}"
+        block: |
+          [Unit]
+          Description=ZFS Exporter
+          After=syslog.target network.target
+
+          [Service]
+          Type=simple
+          User=node-exp
+          Group=node-exp
+          ExecStart={{ remote_binary_path }} --web.listen-address=:9134
+
+          SyslogIdentifier=zfs-exporter
+          Restart=always
+          RestartSec=1
+          StartLimitInterval=0
+
+          ProtectHome=yes
+          NoNewPrivileges=yes
+
+          ProtectSystem=strict
+          ProtectControlGroups=true
+          ProtectKernelModules=true
+          ProtectKernelTunables=yes
+
+          [Install]
+          WantedBy=multi-user.target
+      become: true
+
+    - name: Start and enable service
+      ansible.builtin.systemd_service:
+        name: zfs-exporter
+        state: restarted
+        enabled: true
+      become: true
