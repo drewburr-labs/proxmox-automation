@@ -44,7 +44,6 @@
 
   module_defaults:
     community.general.proxmox_kvm:
-      proxmox_default_behavior: no_defaults
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
@@ -102,7 +101,6 @@
 
   module_defaults:
     community.general.proxmox_kvm:
-      proxmox_default_behavior: no_defaults
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"

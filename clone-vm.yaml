@@ -47,13 +47,12 @@
   gather_facts: false
 
   module_defaults:
-    community.general.proxmox_kvm:
-      proxmox_default_behavior: no_defaults
+    community.proxmox.proxmox_kvm:
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
 
-    community.general.proxmox_vm_info:
+    community.proxmox.proxmox_vm_info:
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
@@ -67,7 +66,7 @@
         vm_name: "{{ template_name }}"
 
     - name: Clone VM
-      community.general.proxmox_kvm:
+      community.proxmox.proxmox_kvm:
         name: "{{ vm_name }}"
         clone: "{{ template_name }}"
         vmid: "{{ vm_data.vmid }}"
@@ -80,7 +79,7 @@
       throttle: 1 # Clone one host at a time
 
     - name: Migrate VM to destination node
-      community.general.proxmox_kvm:
+      community.proxmox.proxmox_kvm:
         name: "{{ vm_name }}"
         node: "{{ destination_node }}"
         migrate: true
@@ -228,8 +227,7 @@
   gather_facts: false
 
   module_defaults:
-    community.general.proxmox_kvm:
-      proxmox_default_behavior: no_defaults
+    community.proxmox.proxmox_kvm:
       api_user: "{{ pmox_user }}"
       api_password: "{{ pmox_password }}"
       api_host: "{{ pmox_url }}"
@@ -249,13 +247,13 @@
           ipconfig0: "gw={{ ipv4_gateway }},ip={{ vm_ip_address }}/{{ ipv4_cidr }}"
 
     - name: Start VM
-      community.general.proxmox_kvm:
+      community.proxmox.proxmox_kvm:
         name: "{{ vm_name }}"
         state: started
         timeout: 300
 
     - name: Wait until VM is running
-      community.general.proxmox_kvm:
+      community.proxmox.proxmox_kvm:
         name: "{{ vm_name }}"
         state: current
       register: vm_state
