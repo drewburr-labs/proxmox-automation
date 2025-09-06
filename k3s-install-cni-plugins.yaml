@@ -1,0 +1,54 @@
+- hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Create temp directory
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: cni_plugins_
+      register: tempdir
+
+
+    - name: Download CNI plugins tar to local
+      ansible.builtin.get_url:
+        url: https://github.com/containernetworking/plugins/releases/download/{{ cni_version }}/cni-plugins-linux-{{ cni_arch }}-{{ cni_version }}.tgz
+        dest: /{{tempdir.path}}/cni-plugins-linux.tgz
+      vars:
+        cni_arch: amd64
+        cni_version: v1.8.0
+
+    - name: Extract CNI plugins
+      ansible.builtin.unarchive:
+        src: /{{tempdir.path}}/cni-plugins-linux.tgz
+        dest: /{{tempdir.path}}/
+
+    - name: Add VM hostname to inventory
+      ansible.builtin.add_host:
+        hostname: "{{ vm_dns_name }}"
+        groups: proxmox_vm
+        vm_name: "{{ item.name }}"
+        tempdir_path: "{{ tempdir.path }}"
+      vars:
+        vm_name: "{{ item.name }}" # Needed to generate vm_dns_name
+      loop: "{{ vms }}"
+      changed_when: false
+
+- hosts: proxmox_vm
+  gather_facts: false
+
+  vars:
+    install_plugins:
+      - macvlan
+      - host-device
+
+  tasks:
+    - name: Install CNI plugin
+      ansible.builtin.copy:
+        src: "/{{ tempdir_path }}/{{ item }}"
+        dest: /var/lib/rancher/k3s/data/current/bin/{{ item }}
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+      loop: "{{ install_plugins }}"
