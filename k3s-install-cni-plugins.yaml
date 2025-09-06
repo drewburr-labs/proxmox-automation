@@ -41,6 +41,7 @@
     install_plugins:
       - macvlan
       - host-device
+      - dhcp
 
   tasks:
     - name: Install CNI plugin
