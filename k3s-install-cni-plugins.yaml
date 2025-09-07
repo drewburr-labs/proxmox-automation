@@ -53,3 +53,30 @@
         mode: "0755"
       become: true
       loop: "{{ install_plugins }}"
+
+    # New tasks to install and activate DHCP CNI systemd service
+    - name: Copy CNI DHCP systemd service
+      ansible.builtin.copy:
+        src: cni/dhcp.service
+        dest: /etc/systemd/system/dhcp.service
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      notify: Restart CNI DHCP service
+
+    - name: Enable and start CNI DHCP service
+      ansible.builtin.systemd:
+        name: dhcp.service
+        enabled: true
+        state: started
+        daemon_reload: true
+      become: true
+
+  handlers:
+    - name: Restart CNI DHCP service
+      ansible.builtin.systemd:
+        name: dhcp.service
+        state: restarted
+        daemon_reload: true
+      become: true

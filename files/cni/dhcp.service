@@ -1,0 +1,49 @@
+[Unit]
+Description=CNI DHCP daemon
+Documentation=https://www.cni.dev/plugins/current/ipam/dhcp/
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsExecutable=/var/lib/rancher/k3s/data/current/bin/dhcp
+
+[Service]
+Type=simple
+# Remove any stale socket before start
+ExecStartPre=/usr/bin/rm -f /run/cni/dhcp.sock
+# Adjust path to the installed CNI dhcp binary if different
+ExecStart=/var/lib/rancher/k3s/data/current/bin/dhcp daemon -socketpath /run/cni/dhcp.sock -broadcast
+Restart=on-failure
+RestartSec=2
+User=root
+Group=root
+
+# Capabilities required for DHCP client (raw packets, low port bind)
+# and netns operations
+AmbientCapabilities=CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_SYS_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_NET_ADMIN CAP_SYS_ADMIN
+NoNewPrivileges=true
+
+# Security hardening
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectProc=invisible
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictNamespaces=false
+RestrictRealtime=true
+SystemCallFilter=@system-service setns
+MemoryDenyWriteExecute=true
+
+# Runtime directory management
+RuntimeDirectory=cni
+RuntimeDirectoryMode=0755
+
+# Resource limits
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
