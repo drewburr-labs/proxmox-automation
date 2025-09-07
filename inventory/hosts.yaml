@@ -23,3 +23,5 @@ node_exporter_hosts:
   children:
     proxmox_hosts:
     node_exporter_vms:
+  hosts:
+    zbackup.drewburr.com:
